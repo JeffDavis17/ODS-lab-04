@@ -108,6 +108,7 @@ T_y = (C1y - scale*(c1x*M[0,1] + c1y*M[1,1] + c1z*M[2,1])).subs(variables)
 T_z = (C1z - scale*(c1x*M[0,2] + c1y*M[1,2] + c1z*M[2,2])).subs(variables)
 
 
+
 # First Design Matrix
 # variables_a needs to be updated by dx values
 def A(variables_a,variables):
@@ -207,12 +208,16 @@ b1 = B(variables_a,variables)
 B1 = np.zeros([12,24],dtype=float)
 B1[:] = b1[:]
 
+    # Approximations of Observations
+
+
 # Adjustment ####################################################################################
 M = B1@cl@B1.T
 
 # Misclosure w is l - fx
 l = np.array([C1x, C1y, C1z, C2x, C2y, C2z, C3x, C3y, C3z, C4x, C4y, C4z])
-Fx = np.array([c1x, c1y, c1z, c2x, c2y, c2z, c3x, c3y, c3z, c4x, c4y, c4z])
+#Fx = np.array([c1x, c1y, c1z, c2x, c2y, c2z, c3x, c3y, c3z, c4x, c4y, c4z])
+Fx = [-2411725.1210, -4733126.763,3519168.3,-2411735.1210, -4733156.763,3519130.3,-2411725.1210, -4733156.763,3519130.3,-2411725.1210, -4733155.763,3519169.3]
 misclosure = l - Fx
 for i in range(misclosure.size):
     misclosure[i] = misclosure[i].subs(variables)
@@ -224,60 +229,65 @@ print(dx)
 
 x_cap = [omega, phi, kappa, T_x, T_y, T_z, scale]
 x_cap = x_cap + dx
-# Update Variables_a with the dx values 
-variables_a1 = [(w,x_cap[0]),(pi,x_cap[1]),(k,x_cap[2]),(Tx,x_cap[3]),(Ty,x_cap[4]),(Tz,x_cap[5]),(s,x_cap[6])]
-a1 = A(variables_a1,variables)
-A1 = np.zeros([12,7],dtype=float)
-A1[:] = a1[:]
-
-# First Second Design Matrix
-b1 = B(variables_a1,variables)
-B1 = np.zeros([12,24],dtype=float)
-B1[:] = b1[:]
 
 
-# Adjustment ####################################################################################
-M = B1@cl@B1.T
+# START ITERATING
+for i in range(10):
+    # Update Variables_a with the dx values 
+    variables_a1 = [(w,x_cap[0]),(pi,x_cap[1]),(k,x_cap[2]),(Tx,x_cap[3]),(Ty,x_cap[4]),(Tz,x_cap[5]),(s,x_cap[6])]
+    a1 = A(variables_a1,variables)
+    A1 = np.zeros([12,7],dtype=float)
+    A1[:] = a1[:]
 
-# Misclosure w is l - fx
-l = np.array([C1x, C1y, C1z, C2x, C2y, C2z, C3x, C3y, C3z, C4x, C4y, C4z])
-Fx = np.array([c1x, c1y, c1z, c2x, c2y, c2z, c3x, c3y, c3z, c4x, c4y, c4z])
-misclosure = l - Fx
-for i in range(misclosure.size):
-    misclosure[i] = misclosure[i].subs(variables)
-misclosure = np.array(misclosure,dtype=float)
-
-# Delta X
-dx = inv(A1.T@inv(M)@A1)@(A1.T@inv(M)@misclosure)
-x_cap = x_cap + dx
-print(dx)
+    # First Second Design Matrix
+    b1 = B(variables_a1,variables)
+    B1 = np.zeros([12,24],dtype=float)
+    B1[:] = b1[:]
 
 
-# Update Variables_a with the dx values 
-variables_a1 = [(w,x_cap[0]),(pi,x_cap[1]),(k,x_cap[2]),(Tx,x_cap[3]),(Ty,x_cap[4]),(Tz,x_cap[5]),(s,x_cap[6])]
-a1 = A(variables_a1,variables)
-A1 = np.zeros([12,7],dtype=float)
-A1[:] = a1[:]
+    # Adjustment ####################################################################################
+    M = B1@cl@B1.T
 
-# First Second Design Matrix
-b1 = B(variables_a1,variables)
-B1 = np.zeros([12,24],dtype=float)
-B1[:] = b1[:]
+    # Update Misclosure
+    l = np.array([C1x, C1y, C1z, C2x, C2y, C2z, C3x, C3y, C3z, C4x, C4y, C4z])
+    Fx = np.array([c1x, c1y, c1z, c2x, c2y, c2z, c3x, c3y, c3z, c4x, c4y, c4z])
+    # Estimates Fx
+    x,y,z = symbols('x y z')
+    m11 = cos(w)*cos(k)
+    m12 = sin(w)*sin(pi)*cos(k) + cos(w)*sin(k)
+    m13 = - cos(w)*sin(pi)*cos(k) + sin(w)*sin(k)
+    m21 = - cos(pi)*sin(k)
+    m22 = - sin(w)*sin(pi)*sin(k) + cos(w)*cos(k)
+    m23 = cos(w)*sin(pi)*sin(k) + sin(w)*cos(k)
+    m31 = sin(pi)
+    m32 = - sin(w)*cos(pi)
+    m33 = cos(w)*cos(pi)
 
+    X = s*(x*m11 + y*m21 + z*m31) + Tx
+    Y = s*(x*m12 + y*m22 + z*m32) + Ty
+    Z = s*(x*m13 + y*m23 + z*m33) + Tz
 
-# Adjustment ####################################################################################
-M = B1@cl@B1.T
+    Fx1 = np.zeros(12)
+    for j in range(0,12,3):
+        int_x  = (X.subs(variables_a1)).subs(zip([x,y,z],Fx[j:j+3]))
+        int_y  = (Y.subs(variables_a1)).subs(zip([x,y,z],Fx[j:j+3]))
+        int_z = (Z.subs(variables_a1)).subs(zip([x,y,z],Fx[j:j+3]))
+        Fx1[j] = int_x.subs(variables)
+        Fx1[j+1] = int_y.subs(variables)
+        Fx1[j+2] = int_z.subs(variables)
+        
+        #Fx1[j] = (X.subs(variables_a1)).subs(zip([x,y,z],Fx[j:j+3])).subs(variables)
+        #Fx1[j+1] = (Y.subs(variables_a1)).subs(zip([x,y,z],Fx[j:j+3])).subs(variables)
+        #Fx1[j+2] = (Z.subs(variables_a1)).subs(zip([x,y,z],Fx[j:j+3])).subs(variables)
+        
+    misclosure = l - Fx1
+    for i in range(misclosure.size):
+        misclosure[i] = misclosure[i].subs(variables)
+    misclosure = np.array(misclosure,dtype=float)
+    
 
-# Misclosure w is l - fx
-l = np.array([C1x, C1y, C1z, C2x, C2y, C2z, C3x, C3y, C3z, C4x, C4y, C4z])
-Fx = np.array([c1x, c1y, c1z, c2x, c2y, c2z, c3x, c3y, c3z, c4x, c4y, c4z])
-misclosure = l - Fx
-for i in range(misclosure.size):
-    misclosure[i] = misclosure[i].subs(variables)
-misclosure = np.array(misclosure,dtype=float)
-
-# Delta X
-dx = inv(A1.T@inv(M)@A1)@(A1.T@inv(M)@misclosure)
-x_cap = x_cap + dx
-print(dx)
+    # Delta X
+    dx = inv(A1.T@inv(M)@A1)@(A1.T@inv(M)@misclosure)
+    x_cap = x_cap + dx
+    print(dx)
 
